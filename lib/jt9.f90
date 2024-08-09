@@ -12,6 +12,7 @@ program jt9
   use readwav
   use ft8_mod1, only : dd8
   use jt65_mod6, only : dd
+  use packjt77
 
   include 'jt9com.f90'
 
@@ -23,7 +24,8 @@ program jt9
   integer npct_unused
 
   character c
-  character(len=500) optarg, infile
+  character(len=500) optarg, infile, historyfile
+  character*13 hiscall13
   character wisfile*256
 
   integer :: arglen,stat,offset,remain,mode=0,flow=200,fsplit=2700,          &
@@ -33,7 +35,7 @@ program jt9
        bLowSidelobes = .false., nexp_decode_set = .false.,                   &
        have_ntol = .false.,multift8 = .false.,hidedupes = .false.,           &
        lft8lowth = .true.,lft8subpass = .true.,lwidedxcsearch = .true.
-  type (option) :: long_options(41) = [                                      &
+  type (option) :: long_options(42) = [                                      &
     option ('help', .false., 'h', 'Display this help message', ''),          &
     option ('shmem',.true.,'s','Use shared memory for sample data','KEY'),   &
     option ('tr-period', .true., 'p', 'Tx/Rx period, default SECONDS=60',    &
@@ -104,7 +106,9 @@ program jt9
     option ('his-grid', .true., 'g', 'his grid locator', 'GRID'),            &
     option ('experience-decode', .true., 'X',                                &
         'experience based decoding flags (1..n), default FLAGS=0',           &
-        'FLAGS') ]
+        'FLAGS'),                                                            &
+    option ('historyfile', .true., 'y',                                      &
+      'Save/load recently-decoded callsigns in a file', 'FILE') ]
 
   type(dec_data), allocatable :: shared_data
   character(len=20) :: datetime=''
@@ -117,9 +121,10 @@ program jt9
   nsubmode = 0
   ntol = 20
   TRperiod=60.d0
+  historyfile = ''
 
   do
-     call getopt('hs:e:a:b:r:m:p:d:f:F:w:t:9876543WYqkTMUSZL:S:H:c:G:x:g:X:Q:C:R:N:E:D:',     &
+     call getopt('hs:e:a:b:r:m:p:d:f:F:w:t:9876543WYqkTMUSZL:S:H:c:G:x:g:X:Q:C:R:N:E:D:y:',     &
           long_options,c,optarg,arglen,stat,offset,remain,.true.)
      if (stat .ne. 0) then
         exit
@@ -210,6 +215,8 @@ program jt9
         case ('X')
            read (optarg(:arglen), *) nexp_decode
            nexp_decode_set = .true.
+        case ('y')
+           read (optarg(:arglen), *) historyfile
      end select
   end do
   
@@ -232,6 +239,10 @@ program jt9
   endif
 
   iret=fftwf_init_threads()            !Initialize FFTW threading 
+
+  if(len(trim(historyfile)).gt.0) then
+    call load_history(historyfile)
+  endif
 
 ! Default to 1 thread, but use nthreads for the big ones
   call fftwf_plan_with_nthreads(1)
@@ -256,6 +267,18 @@ program jt9
   if(hiscall.eq.'b') then
      hiscall='            '
      hisgrid='      '
+  endif
+
+  if(len(trim(mycall)).gt.0) then
+     mycall = Replace_Text(mycall, '-', '/')
+     mycall13 = mycall
+     call save_hash_call(mycall13,n10,n12,n22)
+  endif
+
+  if(len(trim(hiscall)).gt.0) then
+     hiscall = Replace_Text(hiscall, '-', '/')
+     hiscall13 = hiscall
+     call save_hash_call(hiscall13,n10,n12,n22)
   endif
 
   if (mode .eq. 241 .or. mode .eq. 242) then
@@ -510,4 +533,7 @@ program jt9
   call fftwf_cleanup_threads()
   call fftwf_cleanup()
 
+  if(len(trim(historyfile)).gt.0) then
+    call save_history(historyfile)
+  endif
 end program jt9

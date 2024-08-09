@@ -106,6 +106,73 @@ integer function ihashcall(c0,m)
   return
 end function ihashcall
 
+! Source: http://fortranwiki.org/fortran/show/String_Functions
+FUNCTION Replace_Text (s,text,rep)  RESULT(outs)
+   CHARACTER(*)        :: s,text,rep
+   CHARACTER(LEN(s)+100) :: outs     ! provide outs with extra 100 char len
+   INTEGER             :: i, nt, nr
+   
+   outs = s ; nt = LEN_TRIM(text) ; nr = LEN_TRIM(rep)
+   DO
+      i = INDEX(outs,text(:nt)) ; IF (i == 0) EXIT
+      outs = outs(:i-1) // rep(:nr) // outs(i+nt:)
+   END DO
+   END FUNCTION Replace_Text
+
+subroutine load_history(historyfile)
+
+  character*500 historyfile
+  logical file_exists
+  integer io
+  integer hash
+  character*13 callsign
+
+  inquire(FILE=historyfile, EXIST=file_exists)
+
+  if(.not.file_exists) then
+    return
+  endif
+
+  open(unit=20, file=historyfile, action="read")
+  do i = 1, MAXHASH
+    read(20, *, IOSTAT=io) callsign
+
+    ! Convert hyphens back into slashes
+    callsign = Replace_Text(callsign, '-', '/')
+
+    call save_hash_call(callsign,n10,n12,n22)
+
+    if(io < 0) then
+      exit
+    endif
+  end do
+  close (20)
+end
+
+
+subroutine save_history(historyfile)
+   
+   character*500 historyfile
+   character*22 tempcall
+
+   open (unit=20,file=historyfile,action="write",status="replace")
+   ! Write in reverse order, because the order will be flipped when read back in
+   do i = nzhash, 1, -1
+      if (len(calls22(i)).gt.0) then
+         ! Don't write duplicate callsigns to disk
+         if(any(calls22((i+1):).eq.calls22(i))) then
+            cycle
+         endif
+
+         ! Can't read forward slashes, so replace with hypens
+         tempcall = Replace_Text(calls22(i), '/', '-')
+
+         write (20, *) tempcall
+      endif
+   end do
+   close (20)
+end
+
 subroutine save_hash_call(c13,n10,n12,n22)
 
   character*13 c13,cw
@@ -138,6 +205,7 @@ subroutine save_hash_call(c13,n10,n12,n22)
   ihash22(1)=n22
   calls22(1)=cw
   if(nzhash.lt.MAXHASH) nzhash=nzhash+1
+
 900 continue
   return 
 end subroutine save_hash_call
